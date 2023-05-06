@@ -1,94 +1,60 @@
 import boto3
 import logging
 from botocore.exceptions import ClientError
+import json
 
 
-# создаем клиент для работы с SQS
-logger = logging.getLogger(__name__)
-sqs = boto3.client('sqs')
+# logger config
+logger = logging.getLogger()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s: %(levelname)s: %(message)s')
 
+queue_url_standard = 'https://sqs.eu-central-1.amazonaws.com/065103934905/immo-video-queue-standard'
+queue_arn_standard = 'arn:aws:sqs:eu-central-1:065103934905:immo-video-queue-standard'
+queue_url_fifo = 'https://sqs.eu-central-1.amazonaws.com/065103934905/immo-video-queue.fifo'
+queue_arn_fifo = 'arn:aws:sqs:eu-central-1:065103934905:immo-video-queue.fifo'
 
 class test_for_sqs:
     def __init__(self):
-        self.sqs = boto3.client('sqs')
-
-    def delete(self, queue_url, receipt_handle):
-        try:
-            self.sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
-        except ClientError as error:
-            logger.exception("Couldn't delete message with ReceiptHandle=%s from queue at URL=%s.", receipt_handle, queue_url)
-            raise error
-        else:
-            logger.info("Deleted message with ReceiptHandle=%s from queue at URL=%s.", receipt_handle, queue_url)
+        self.sqs = boto3.client('sqs', region_name='eu-central-1')
 
 
 # Receive messages from a queue
-    def receive_messages(queue, max_number, wait_time):
-        """
-        Receive a batch of messages in a single request from an SQS queue.
+    def read_from_sqs_queue(self):
+        response = self.sqs.receive_message(
+            QueueUrl=queue_url_standard,
+            MaxNumberOfMessages=1,
+            WaitTimeSeconds=10
+        )
 
-        :param queue: The queue from which to receive messages.
-        :param max_number: The maximum number of messages to receive. The actual number
-                           of messages received might be less.
-        :param wait_time: The maximum time to wait (in seconds) before returning. When
-                          this number is greater than zero, long polling is used. This
-                          can result in reduced costs and fewer false empty responses.
-        :return: The list of Message objects received. These each contain the body
-                 of the message and metadata and custom attributes.
-        """
-        try:
-            messages = queue.receive_messages(
-                MessageAttributeNames=['All'],
-                MaxNumberOfMessages=max_number,
-                WaitTimeSeconds=wait_time
-            )
-            for msg in messages:
-                logger.info("Received message: %s: %s", msg.message_id, msg.body)
-        except ClientError as error:
-            logger.exception("Couldn't receive messages from queue: %s", queue)
-            raise error
-        else:
-            return messages
+        print(f"Number of messages received: {len(response.get('Messages', []))}")
+
+        for message in response.get('Messages', []):
+            message_body = message['Body']
+            print(f"Message body: {json.loads(message_body)} \n")
+            receipt_handle = message['ReceiptHandle']
+            print(f"Receipt Handle: {message['ReceiptHandle']} \n")
+        return receipt_handle
 
 # Delete a message from a queue
-    def delete_message(message):
-        """
-        Delete a message from a queue. Clients must delete messages after they
-        are received and processed to remove them from the queue.
-
-        :param message: The message to delete. The message's queue URL is contained in
-                        the message's metadata.
-        :return: None
-        """
-        try:
-            message.delete()
-            logger.info("Deleted message: %s", message.message_id)
-        except ClientError as error:
-            logger.exception("Couldn't delete message: %s", message.message_id)
-            raise error
+    def delete_from_sqs_queue(self, receipt_handle):
+        response = self.sqs.delete_message(
+            QueueUrl=queue_url_standard,
+            ReceiptHandle=receipt_handle,
+        )
+        print(f"Deleted message: {response}\n")
 
 # Send a message to a queue
-    def send_message(queue, message_body, message_attributes=None):
-        """
-        Send a message to an Amazon SQS queue.
+    def send_message_to_sqs_queue(self):
+        message = {'key': 'value'}
+        response = self.sqs.send_message(
+            QueueUrl=queue_url_standard,
+            MessageBody=json.dumps(message)
+        )
+        print(f"Sent message: {response}\n")
 
-        :param queue: The queue that receives the message.
-        :param message_body: The body text of the message.
-        :param message_attributes: Custom attributes of the message. These are key-value
-                                   pairs that can be whatever you want.
-        :return: The response from SQS that contains the assigned message ID.
-        """
-        if not message_attributes:
-            message_attributes = {}
 
-        try:
-            response = queue.send_message(
-                MessageBody=message_body,
-                MessageAttributes=message_attributes
-            )
-        except ClientError as error:
-            logger.exception("Send message failed: %s", message_body)
-            raise error
-        else:
-            return response
-
+my_test = test_for_sqs()
+#my_test.send_message_to_sqs_queue()
+receipt_handle = my_test.read_from_sqs_queue()
+my_test.delete_from_sqs_queue(receipt_handle)
+my_test.read_from_sqs_queue()

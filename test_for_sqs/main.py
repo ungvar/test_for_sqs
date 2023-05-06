@@ -27,13 +27,13 @@ class test_for_sqs:
         )
 
         print(f"Number of messages received: {len(response.get('Messages', []))}")
-
+        receipt_handle = ''
         for message in response.get('Messages', []):
             message_body = message['Body']
             print(f"Message body: {json.loads(message_body)} \n")
             receipt_handle = message['ReceiptHandle']
-            print(f"Receipt Handle: {message['ReceiptHandle']} \n")
-        return receipt_handle
+            print(f"Receipt Handle: {receipt_handle} \n")
+        return receipt_handle if receipt_handle else None
 
 # Delete a message from a queue
     def delete_from_sqs_queue(self, receipt_handle):
@@ -53,8 +53,17 @@ class test_for_sqs:
         print(f"Sent message: {response}\n")
 
 
+# Clean all messages from a queue
+    def clean_sqs_queue(self):
+        response = self.sqs.purge_queue(
+            QueueUrl=queue_url_standard,
+        )
+        print(f"All clean: {response}")
+
+
 my_test = test_for_sqs()
-#my_test.send_message_to_sqs_queue()
+my_test.send_message_to_sqs_queue()
 receipt_handle = my_test.read_from_sqs_queue()
 my_test.delete_from_sqs_queue(receipt_handle)
+my_test.clean_sqs_queue()
 my_test.read_from_sqs_queue()
